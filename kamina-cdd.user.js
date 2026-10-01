@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.14.0
+// @version      3.14.1
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -397,7 +397,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.14.0</span>
+      <span class="cdd-ver">v3.14.1</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -1021,7 +1021,7 @@
       const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
       if (t.length > 160) continue;
       const m = t.match(/^([^,]{3,120}?)\s*,\s*CI\s*:\s*(\d{10,13})\b/i);
-      if (m) return { nombre: m[1].trim(), ci: m[2] };
+      if (m) return { nombre: m[1].replace(/^\s*cliente\s*:?\s*/i, '').trim(), ci: m[2] };
     }
     const u = location.pathname.match(/CEDULA\/(\d+)/i);
     return { nombre: '', ci: u ? u[1] : '' };
@@ -1042,25 +1042,38 @@
     out.push('');
     if (r.linea) out.push(`Línea: ${r.linea}`);
     out.push(`Valor a facturar: $${fmt(r.factura)}`);
-    out.push(`Total a cobrar entrada: $${fmt(r.total)}`);
 
-    const det = [];
-    if (r.sugIncl > 0) {
-      // Dentro del cupo: el sugerido va incluido en el crédito
-      if (r.entPct > 0) det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.total)}`);
-      det.push(`Sugerido: $${fmt(r.sugIncl)}`);
+    if (r.cuotaSI != null) {
+      // ── Plan SIN INTERÉS ──
+      out.push(`Plan: 6 pagos quincenales de $${fmt(r.cuotaSI)}`);
+      if (r.total > 0) {
+        // Supera el tope: el cliente hace 2 pagos distintos
+        out.push('');
+        out.push('El cliente realiza 2 pagos:');
+        out.push(`1) Primera cuota: $${fmt(r.cuotaSI)}`);
+        out.push(`2) Entrada Kissu: $${fmt(r.total)}`);
+        if (r.siAlcProd > 0) out.push(`   - Alcance: $${fmt(r.siAlcProd)}`);
+        if (r.siAlcSug  > 0) out.push(`   - Sugerido: $${fmt(r.siAlcSug)}`);
+      } else if (r.sugIncl > 0) {
+        out.push('');
+        out.push(`Sugerido ya incluido: $${fmt(r.sugIncl)}`);
+      }
+    } else {
+      // ── Planes con interés ──
+      out.push(`Total a cobrar entrada: $${fmt(r.total)}`);
+      const det = [];
+      if (r.sugIncl > 0) {
+        // Dentro del cupo: el sugerido va incluido en el crédito
+        if (r.entPct > 0) det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.total)}`);
+        det.push(`Sugerido: $${fmt(r.sugIncl)}`);
+      }
+      if (r.alcance != null) {
+        det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.entKamina)}`);
+        if (r.alcProd > 0) det.push(`Alcance: $${fmt(r.alcProd)}`);
+        if (r.alcSug  > 0) det.push(`Sugerido: $${fmt(r.alcSug)}`);
+      }
+      if (det.length) { out.push(''); out.push(...det); }
     }
-    if (r.siAlcProd != null) {
-      if (r.siAlcProd > 0) det.push(`Alcance: $${fmt(r.siAlcProd)}`);
-      if (r.siAlcSug  > 0) det.push(`Sugerido: $${fmt(r.siAlcSug)}`);
-    }
-    if (r.alcance != null) {
-      det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.entKamina)}`);
-      if (r.alcProd > 0) det.push(`Alcance: $${fmt(r.alcProd)}`);
-      if (r.alcSug  > 0) det.push(`Sugerido: $${fmt(r.alcSug)}`);
-    }
-    if (r.cuotaSI != null) det.push(`6 pagos quincenales de $${fmt(r.cuotaSI)}`);
-    if (det.length) { out.push(''); out.push(...det); }
 
     navigator.clipboard.writeText(out.join('\n'))
       .then(() => flash('ok', '✓'))
