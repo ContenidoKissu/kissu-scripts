@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.14.1
+// @version      3.14.2
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -397,7 +397,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.14.1</span>
+      <span class="cdd-ver">v3.14.2</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -1052,8 +1052,11 @@
         out.push('El cliente realiza 2 pagos:');
         out.push(`1) Primera cuota: $${fmt(r.cuotaSI)}`);
         out.push(`2) Entrada Kissu: $${fmt(r.total)}`);
-        if (r.siAlcProd > 0) out.push(`   - Alcance: $${fmt(r.siAlcProd)}`);
-        if (r.siAlcSug  > 0) out.push(`   - Sugerido: $${fmt(r.siAlcSug)}`);
+        // Desglose solo si hay sugerido (si es solo alcance, ya está en la línea de arriba)
+        if (r.siAlcSug > 0) {
+          if (r.siAlcProd > 0) out.push(`   - Alcance: $${fmt(r.siAlcProd)}`);
+          out.push(`   - Sugerido: $${fmt(r.siAlcSug)}`);
+        }
       } else if (r.sugIncl > 0) {
         out.push('');
         out.push(`Sugerido ya incluido: $${fmt(r.sugIncl)}`);
