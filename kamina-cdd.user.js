@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.11.1
+// @version      3.12.0
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -387,13 +387,13 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.11.1</span>
+      <span class="cdd-ver">v3.12.0</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
     </div>
     <div id="cdd-head-rangos">
-      <span class="hr si">🟢 SIN INTERÉS <b>$40–$400</b></span>
+      <span class="hr si">🟢 SIN INTERÉS <b>$30–$400</b></span>
       <span class="hr">🔵 Otras <b>$300–$2,500</b></span>
     </div>
     <div id="cdd-body">
@@ -703,7 +703,7 @@
           : `<b class="cdd-lmax nocat">💵 s/categoría</b>`;
 
         btn.innerHTML = `${line.name}<small>Cupo $${fmt(line.cupo, 0)}</small>${maxTxt}`;
-        btn.addEventListener('click', () => selectLine(line));
+        btn.addEventListener('click', () => { selectLine(line); abrirSimuladorKamina(line); });
         container.appendChild(btn);
         attachKaminaCard(line);
       });
@@ -733,6 +733,141 @@
       const h = document.getElementById('cdd-head');
       if (h) { h.classList.add('flash'); setTimeout(() => h.classList.remove('flash'), 350); }
     });
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     ABRIR SIMULADOR DE KAMINA CON LA LÍNEA ELEGIDA
+     Clic en un botón de línea del panel →
+       1) si el "Simulador de cuotas" no está abierto, pulsa el ícono $ de esa tarjeta
+       2) en "Línea de producto" elige la misma línea (si no viene ya elegida)
+  ═══════════════════════════════════════════════════════════════ */
+  const normTxt = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                                 .replace(/\s+/g, ' ').trim().toLowerCase();
+  const sleep   = ms => new Promise(r => setTimeout(r, ms));
+  const isVis   = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const inPanel = el => !!(panel && panel.contains(el));
+  let simRun = 0;
+
+  async function waitFor(fn, timeout = 3000, step = 100) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeout) {
+      const r = fn();
+      if (r) return r;
+      await sleep(step);
+    }
+    return null;
+  }
+
+  // Clic "completo" (sirve para Angular Material y MUI, que abren con mousedown o click)
+  function fireClick(el) {
+    ['mousedown', 'mouseup', 'click'].forEach(type =>
+      el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window, button: 0 })));
+  }
+
+  // Devuelve el contenedor del modal "Simulador de cuotas" si está visible
+  function findSimulador() {
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.childElementCount > 2 || inPanel(el) || !isVis(el)) continue;
+      if (normTxt(el.textContent) !== 'simulador de cuotas') continue;
+      const dlg = el.closest('[role="dialog"], mat-dialog-container, .MuiDialog-paper, .modal-content, .cdk-overlay-pane');
+      if (dlg) return dlg;
+      let box = el;
+      for (let i = 0; i < 8 && box; i++) {
+        if (normTxt(box.innerText).includes('linea de producto')) return box;
+        box = box.parentElement;
+      }
+    }
+    return null;
+  }
+
+  // Selector "Línea de producto" dentro del modal (primer desplegable)
+  function findLineaSelect(modal) {
+    const cands = [...modal.querySelectorAll(
+      'mat-select, select, [role="combobox"], [aria-haspopup="listbox"], [role="button"][aria-haspopup]'
+    )].filter(isVis);
+    return cands[0] || null;
+  }
+
+  function selText(sel) {
+    if (sel.tagName === 'SELECT') return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+    return sel.textContent;
+  }
+
+  // Ícono $ (o botón) de la tarjeta de la línea en la página
+  function findCardTrigger(line) {
+    let box = line.el;
+    for (let i = 0; i < 4 && box; i++) {
+      if (!inPanel(box)) {
+        const c = [...box.querySelectorAll('button, [role="button"], a, mat-icon, .mat-icon, svg, i')]
+          .filter(e => !inPanel(e) && isVis(e));
+        if (c.length) return c[0].closest('button, [role="button"], a') || c[0];
+      }
+      const p = box.parentElement;
+      if (!p) break;
+      if (((p.innerText || '').match(/Entrada/gi) || []).length > 1) break; // ya abarca otra tarjeta
+      box = p;
+    }
+    return null;
+  }
+
+  function simMsg(txt) {
+    const info = document.getElementById('cdd-info');
+    if (!info) return;
+    info.textContent = txt;
+    info.style.cssText = 'display:block;background:#fff6e0;border-color:#f0c36d;color:#8a5a00;';
+    clearTimeout(simMsg._t);
+    simMsg._t = setTimeout(() => { info.style.display = 'none'; }, 4500);
+  }
+
+  async function abrirSimuladorKamina(line) {
+    const run    = ++simRun;
+    const target = normTxt(line.name);
+    const match  = txt => {
+      const n = normTxt(txt);
+      return !!n && (n === target || n.includes(target) || (n.length > 3 && target.includes(n)));
+    };
+
+    try {
+      // 1) Abrir el simulador si no está abierto
+      let modal = findSimulador();
+      if (!modal) {
+        const trig = findCardTrigger(line);
+        if (!trig) { simMsg(`⚠️ No encontré el botón $ de ${line.name} en Kamina.`); return; }
+        fireClick(trig);
+        modal = await waitFor(findSimulador, 3500);
+        if (run !== simRun) return;
+        if (!modal) { simMsg('⚠️ El simulador de Kamina no se abrió.'); return; }
+      }
+
+      // 2) Elegir la línea en "Línea de producto"
+      const sel = await waitFor(() => findLineaSelect(modal), 2000);
+      if (run !== simRun || !sel) return;
+      if (match(selText(sel))) return; // ya está elegida
+
+      if (sel.tagName === 'SELECT') {
+        const opt = [...sel.options].find(o => match(o.text));
+        if (opt) {
+          sel.value = opt.value;
+          sel.dispatchEvent(new Event('input',  { bubbles: true }));
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        } else simMsg(`⚠️ "${line.name}" no está en Línea de producto.`);
+        return;
+      }
+
+      fireClick(sel);
+      const opt = await waitFor(() =>
+        [...document.querySelectorAll('[role="option"], mat-option')]
+          .filter(o => isVis(o) && !inPanel(o)).find(o => match(o.textContent)), 2000);
+      if (run !== simRun) return;
+      if (opt) {
+        fireClick(opt);
+      } else {
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        simMsg(`⚠️ "${line.name}" no está en Línea de producto.`);
+      }
+    } catch (e) {
+      console.warn('[CDD] abrirSimuladorKamina', e);
+    }
   }
 
   /* ══════════════════════════════════════════════════════════════
