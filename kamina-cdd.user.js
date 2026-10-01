@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.13.1
+// @version      3.13.3
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -83,12 +83,12 @@
   //   El transporte depende del rango del efectivo (0/8/12/15/25), por eso se busca
   //   el ENTERO más alto cuyo crédito (efectivo + transporte, sin sugerido) entre en el cupo.
   //   Ej.: cupo $2,500 · Cat. 4 (30%) → base $1,615 → efectivo $1,590 (+ $25 transporte).
-  function efectivoMaxPorCupo(cupo, carteraRate) {
+  function efectivoMaxPorCupo(cupo, carteraRate, sugerido = 0) {
     const netoReal = 1 - (carteraRate + HONORARIO);
     if (netoReal <= 0 || cupo <= 0) return 0;
-    let ef = Math.floor((cupo * netoReal) / MARGIN_TARGET);
+    let ef = Math.floor((cupo * netoReal) / MARGIN_TARGET - sugerido);
     // El crédito crece con el efectivo → bajar hasta que entre (máx. ~26 pasos)
-    while (ef > 0 && calcCartera(ef, transporteAuto(ef), 0, carteraRate).credito > cupo) ef--;
+    while (ef > 0 && calcCartera(ef, transporteAuto(ef), sugerido, carteraRate).credito > cupo) ef--;
     return Math.max(0, ef);
   }
 
@@ -395,7 +395,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.13.1</span>
+      <span class="cdd-ver">v3.13.3</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -1044,7 +1044,8 @@
     const det = [];
     if (r.alcance != null) {
       det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.entKamina)}`);
-      det.push(`Alcance: $${fmt(r.alcance)}`);
+      if (r.alcProd > 0) det.push(`Alcance: $${fmt(r.alcProd)}`);
+      if (r.alcSug  > 0) det.push(`Sugerido: $${fmt(r.alcSug)}`);
     }
     if (r.cuotaSI != null) det.push(`6 pagos quincenales de $${fmt(r.cuotaSI)}`);
     if (det.length) { out.push(''); out.push(...det); }
@@ -1074,7 +1075,8 @@
         <div class="ei-v">$${fmt(d.total)}</div>
         <div class="ei-det">
           <div class="ei-det-row"><span>Entrada Kamina (${d.entPct}%)</span><b>$${fmt(d.entKamina)}</b></div>
-          <div class="ei-det-row"><span>+ Alcance</span><b>$${fmt(d.alcance)}</b></div>
+          ${d.alcProd > 0 ? `<div class="ei-det-row"><span>+ Alcance</span><b>$${fmt(d.alcProd)}</b></div>` : ''}
+          ${d.alcSug  > 0 ? `<div class="ei-det-row"><span>+ Sugerido</span><b>$${fmt(d.alcSug)}</b></div>` : ''}
         </div>`;
       return;
     }
@@ -1247,26 +1249,31 @@
     document.getElementById('cdd-hint').textContent = '';
 
     // ── ¿El producto supera lo que entra en el cupo? → modo ALCANCE ──
-    const efMax  = currentLine ? efectivoMaxPorCupo(currentLine.cupo, carteraRate) : 0;
+    // El sugerido también ocupa cupo: con sugerido entra menos efectivo y sube el alcance
+    const efMax  = currentLine ? efectivoMaxPorCupo(currentLine.cupo, carteraRate, sugInput) : 0;
     const excede = currentLine && efMax > 0 && efectivo > efMax;
 
     if (excede) {
       // Se usa el cupo completo; el excedente lo paga el cliente como alcance.
-      // El Sugerido NO aplica en este caso.
+      // El Sugerido se suma al alcance (reduce el efectivo que entra en el cupo).
       const cupo         = currentLine.cupo;
       const entPct       = currentLine.entPct || 0;
       const transporte   = transporteAuto(efMax);
-      const { base, meta, netoReal } = calcCartera(efMax, transporte, 0, carteraRate);
+      const { base, meta, netoReal } = calcCartera(efMax, transporte, sugInput, carteraRate);
 
       const alcance      = round2(efectivo - efMax);
+      // Desglose: lo que excede el producto + lo que aporta el sugerido
+      const efMax0       = efectivoMaxPorCupo(cupo, carteraRate, 0);
+      let   alcProd      = round2(Math.max(0, efectivo - efMax0));
+      let   alcSug       = round2(Math.max(0, alcance - alcProd));
+      alcProd            = round2(alcance - alcSug);
       const entKamina    = round2(cupo * entPct / 100);
       const entradaFinal = round2(entKamina + alcance);
       const factura      = round2(cupo + alcance);
       alcanceState = { entradaFinal };
-      resumenState = { linea: currentLine.name, factura, total: entradaFinal, entPct, entKamina, alcance };
+      resumenState = { linea: currentLine.name, factura, total: entradaFinal, entPct, entKamina, alcance, alcProd, alcSug };
 
       if (transpEl) transpEl.value = transporte;
-      c2el.classList.add('na');
       if (sugRef) sugRef.textContent = '';
 
       warn.textContent = '⚠️ Supera el cupo, requiere entrada';
@@ -1281,7 +1288,7 @@
       if (alcBox) alcBox.classList.add('on');
 
       showEntradaAlert(`$${fmt(entradaFinal)}`, entPct, {
-        desglose: { entPct, entKamina, alcance, total: entradaFinal },
+        desglose: { entPct, entKamina, alcProd, alcSug, total: entradaFinal },
       });
       return;
     }
