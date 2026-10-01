@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.13.0
+// @version      3.13.1
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -38,6 +38,8 @@
   };
   const CARTERA_DEFAULT = 0.35; // fallback (peor caso: NEW / inclusión)
 
+  const CREDITO_MIN    = 300;  // monto mínimo de crédito (planes con interés)
+  const CREDITO_MIN_SI = 30;   // monto mínimo de crédito (Plan SIN INTERÉS)
   const PLAN_SI_RATE = 0.15;   // Plan SIN INTERÉS: markup 15% → crédito = C1 × 1.15
   const ANNUAL_RATE  = 0.1559; // tasa anual nominal Kamina (referencia)
   const ALL_MONTHS   = [6, 9, 12, 15, 18, 24];
@@ -393,7 +395,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.13.0</span>
+      <span class="cdd-ver">v3.13.1</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -1300,6 +1302,9 @@
     if (currentLine && credito > currentLine.cupo) {
       warn.textContent = `⚠️ El crédito calculado ($${fmt(credito)}) supera el cupo de ${currentLine.name} ($${fmt(currentLine.cupo, 0)}).`;
       warn.classList.add('on'); c1el.classList.add('over');
+    } else if (efectivo > 0 && credito < CREDITO_MIN) {
+      warn.textContent = `⚠️ Crédito menor al mínimo de $${fmt(CREDITO_MIN, 0)}`;
+      warn.classList.add('on'); c1el.classList.add('over');
     } else {
       warn.classList.remove('on'); c1el.classList.remove('over');
     }
@@ -1391,8 +1396,14 @@
       if (abonoBox) abonoBox.classList.add('on');
       resumenState = { linea: currentLine.name, factura, total: abono, cuotaSI: cuota };
     } else {
-      warn.classList.remove('on');
-      c1el.classList.remove('over');
+      if (c1 > 0 && valorCredito < CREDITO_MIN_SI) {
+        warn.textContent = `⚠️ Crédito menor al mínimo de $${fmt(CREDITO_MIN_SI, 0)}`;
+        warn.classList.add('on');
+        c1el.classList.add('over');
+      } else {
+        warn.classList.remove('on');
+        c1el.classList.remove('over');
+      }
       if (abonoBox) abonoBox.classList.remove('on');
       if (c1 > 0) resumenState = { linea: currentLine ? currentLine.name : null, factura: valorCredito, total: 0, cuotaSI: cuota };
     }
