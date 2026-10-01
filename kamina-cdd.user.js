@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.12.0
+// @version      3.12.1
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -309,11 +309,11 @@
   .cdd-hint{font-size:10px;color:#1748a8;margin-top:2px;min-height:14px;}
 
   /* Cajas resultado */
-  .cdd-res3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin:5px 0;}
-  .cdd-rbox{background:#eef2f8;border:1px solid #e0e7f1;border-radius:6px;padding:4px 5px;text-align:center;}
+  .cdd-res3{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin:3px 0 4px;}
+  .cdd-rbox{background:#f3f6fa;border:1px solid #e6ecf3;border-radius:5px;padding:1px 4px;text-align:center;}
   .cdd-rbox.ent{background:#f7f2e6;border-color:#e6dcc0;}
-  .cdd-rk{font-size:7.5px;color:#94a2b3;font-weight:700;text-transform:uppercase;letter-spacing:.2px;margin-bottom:1px;}
-  .cdd-rv{font-size:11px;font-weight:700;color:#8a97a8;line-height:1.05;}
+  .cdd-rk{font-size:6.5px;color:#a3afbd;font-weight:700;text-transform:uppercase;letter-spacing:.2px;margin-bottom:0;}
+  .cdd-rv{font-size:9px;font-weight:700;color:#98a4b3;line-height:1.1;}
   .cdd-rbox.ent .cdd-rv{color:#b08a4a;}
   .cdd-asist-row{font-size:11px;color:#6b7a90;text-align:center;margin-bottom:9px;}
   .cdd-asist-row strong{color:#132033;}
@@ -362,8 +362,10 @@
   /* Caja Alcance + Factura (planes con interés, producto supera el cupo) */
   #cdd-alc-box{display:none;margin:4px 0 8px;}
   #cdd-alc-box.on{display:block;}
-  #cdd-alc-box .cdd-sub-box{padding:6px 8px;}
-  .cdd-alc-sub{font-size:9.5px;color:#5a8a6c;margin-top:2px;}
+  .cdd-fact-box{background:#e8f6ed;border:2px solid #2e9d5b;border-radius:10px;padding:7px 12px;
+    display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .cdd-fact-k{font-size:11px;font-weight:800;color:#0b6033;text-transform:uppercase;letter-spacing:.3px;line-height:1.15;}
+  .cdd-fact-v{font-size:22px;font-weight:900;color:#0b6033;line-height:1;white-space:nowrap;}
   #cdd-entrada-inline .ei-rows{margin:6px 0 2px;text-align:left;font-size:11.5px;}
   #cdd-entrada-inline .ei-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 2px;}
   #cdd-entrada-inline .ei-row span small{display:block;font-size:9px;opacity:.8;font-weight:400;}
@@ -387,7 +389,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.12.0</span>
+      <span class="cdd-ver">v3.12.1</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -437,7 +439,7 @@
       <!-- Cajas resultado modo CARTERA (ocultas en modo SI) -->
       <div id="cdd-wrap-results">
         <div class="cdd-cred-box">
-          <div class="cdd-cred-k">💳 VALOR DE CRÉDITO A PONER</div>
+          <div class="cdd-cred-k">💳 VALOR CRÉDITO A CALCULAR</div>
           <div class="cdd-cred-row">
             <div class="cdd-cred-v">$<span id="cdd-rcred">—</span></div>
             <button id="cdd-btn-cred" class="cdd-cred-cp">📋 Copiar</button>
@@ -462,12 +464,10 @@
 
       <!-- Caja Alcance + Factura (planes con interés, producto supera el cupo) -->
       <div id="cdd-alc-box">
-        <div class="cdd-sub-box factura">
-          <div class="cdd-sub-k">🧾 Valor a facturar</div>
-          <div class="cdd-sub-v">$<span id="cdd-alc-fact">—</span></div>
-          <div class="cdd-alc-sub" id="cdd-alc-fsub">—</div>
+        <div class="cdd-fact-box">
+          <div class="cdd-fact-k">🧾 Valor a<br>facturar</div>
+          <div class="cdd-fact-v">$<span id="cdd-alc-fact">—</span></div>
         </div>
-        <div class="cdd-sub-cuota" id="cdd-alc-det">—</div>
       </div>
 
       <!-- Caja Factura + Cuotas (Plan SIN INTERÉS, producto de mayor valor) -->
@@ -1100,7 +1100,7 @@
     const credBox = document.querySelector('.cdd-cred-box');
     if (credBox) credBox.classList.toggle('si-green', on);
     const credK = document.querySelector('.cdd-cred-k');
-    if (credK) credK.textContent = on ? '🟢 CRÉDITO PLAN SIN INTERÉS' : '💳 VALOR DE CRÉDITO A PONER';
+    if (credK) credK.textContent = on ? '🟢 CRÉDITO PLAN SIN INTERÉS' : '💳 VALOR CRÉDITO A CALCULAR';
 
     // Copiar Cuotas: en SIN INTERÉS lo muestra updateSinInteres(); en cartera, el watcher
     document.getElementById('cdd-wrap-copiar').style.display    = 'none';
@@ -1207,9 +1207,9 @@
 
       if (transpEl) transpEl.value = transporte;
       c2el.classList.add('na');
-      if (sugRef) sugRef.textContent = 'Sugerido no aplica: el producto supera el cupo';
+      if (sugRef) sugRef.textContent = '';
 
-      warn.textContent = `⚠️ Producto supera el cupo: máx. $${fmt(efMax, 0)} en efectivo. El cliente da un alcance de $${fmt(alcance)}.`;
+      warn.textContent = '⚠️ Supera el cupo';
       warn.classList.add('on'); c1el.classList.add('over');
 
       document.getElementById('cdd-rcred').textContent = fmt(cupo, 0);
@@ -1218,10 +1218,6 @@
       document.getElementById('cdd-rneto').textContent = (netoReal * 100).toFixed(2);
 
       document.getElementById('cdd-alc-fact').textContent = fmt(factura);
-      document.getElementById('cdd-alc-fsub').textContent =
-        `Cupo $${fmt(cupo, 0)} + alcance $${fmt(alcance)}`;
-      document.getElementById('cdd-alc-det').textContent  =
-        `Efectivo $${fmt(efectivo)} − máx. $${fmt(efMax, 0)} = alcance $${fmt(alcance)}`;
       if (alcBox) alcBox.classList.add('on');
 
       showEntradaAlert(`$${fmt(entradaFinal)}`, entPct, {
