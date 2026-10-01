@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.12.1
+// @version      3.13.0
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -269,13 +269,19 @@
   .cdd-cred-cp:disabled{opacity:.4;cursor:not-allowed;}
 
   /* Badge de categoría del cliente (arriba) */
-  #cdd-cat-badge{display:none;align-items:center;gap:5px;margin:0 0 7px;
-    background:linear-gradient(135deg,#1748a8,#0a3069);color:#fff;border-radius:8px;
-    padding:5px 9px;font-size:10.5px;font-weight:800;letter-spacing:.2px;}
+  #cdd-cat-row{display:flex;align-items:center;gap:5px;margin:0 0 6px;}
+  #cdd-cat-badge{display:none;flex:1;align-items:center;gap:4px;min-width:0;
+    background:linear-gradient(135deg,#1748a8,#0a3069);color:#fff;border-radius:6px;
+    padding:2px 7px;font-size:8.5px;font-weight:700;letter-spacing:.2px;white-space:nowrap;overflow:hidden;}
   #cdd-cat-badge.on{display:flex;}
   #cdd-cat-badge.nodetect{background:#fdecea;color:#b71c1c;border:1px solid #f5a5a0;}
   #cdd-cat-badge .cb-tag{background:rgba(255,255,255,.18);border-radius:999px;
-    padding:1px 8px;font-size:10px;}
+    padding:0 6px;font-size:8.5px;}
+  #cdd-btn-resumen{flex:0 0 auto;width:26px;height:22px;border-radius:6px;border:1.5px solid #c8d8ee;
+    background:#fff;cursor:pointer;font-size:12px;line-height:1;padding:0;}
+  #cdd-btn-resumen:hover{border-color:#1f5fd1;background:#eef4ff;}
+  #cdd-btn-resumen.ok{background:#0b6033;border-color:#0b6033;color:#fff;}
+  #cdd-btn-resumen.err{background:#fdecea;border-color:#f5a5a0;}
   #cdd-cat-badge.nodetect .cb-tag{background:rgba(183,28,28,.12);}
 
   #cdd-info{background:#e5f3ec;border:1px solid #8ecbab;border-radius:9px;
@@ -362,16 +368,14 @@
   /* Caja Alcance + Factura (planes con interés, producto supera el cupo) */
   #cdd-alc-box{display:none;margin:4px 0 8px;}
   #cdd-alc-box.on{display:block;}
-  .cdd-fact-box{background:#e8f6ed;border:2px solid #2e9d5b;border-radius:10px;padding:7px 12px;
+  .cdd-fact-box{background:#e8f6ed;border:1.5px solid #2e9d5b;border-radius:8px;padding:5px 10px;
     display:flex;align-items:center;justify-content:space-between;gap:8px;}
-  .cdd-fact-k{font-size:11px;font-weight:800;color:#0b6033;text-transform:uppercase;letter-spacing:.3px;line-height:1.15;}
-  .cdd-fact-v{font-size:22px;font-weight:900;color:#0b6033;line-height:1;white-space:nowrap;}
-  #cdd-entrada-inline .ei-rows{margin:6px 0 2px;text-align:left;font-size:11.5px;}
-  #cdd-entrada-inline .ei-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 2px;}
-  #cdd-entrada-inline .ei-row span small{display:block;font-size:9px;opacity:.8;font-weight:400;}
-  #cdd-entrada-inline .ei-row b{font-weight:800;white-space:nowrap;}
-  #cdd-entrada-inline .ei-row.tot{border-top:1px solid rgba(255,255,255,.4);margin-top:4px;padding-top:5px;
-    font-size:15px;font-weight:900;}
+  .cdd-fact-k{font-size:9.5px;font-weight:800;color:#0b6033;text-transform:uppercase;letter-spacing:.3px;}
+  .cdd-fact-v{font-size:15px;font-weight:900;color:#0b6033;line-height:1;white-space:nowrap;}
+  #cdd-entrada-inline .ei-det{margin:6px 0 0;padding-top:5px;border-top:1px solid rgba(255,255,255,.35);
+    text-align:left;font-size:10px;opacity:.88;}
+  #cdd-entrada-inline .ei-det-row{display:flex;justify-content:space-between;gap:8px;padding:1px 2px;}
+  #cdd-entrada-inline .ei-det-row b{font-weight:700;white-space:nowrap;}
   .cdd-f input.na{background:#edf1f9;color:#9aabb8;text-decoration:line-through;}
 
   #cdd-open{position:fixed;right:14px;top:68px;z-index:2147483646;
@@ -389,7 +393,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.12.1</span>
+      <span class="cdd-ver">v3.13.0</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -406,7 +410,10 @@
       </div>
 
       <!-- Badge de categoría del cliente (visible arriba) -->
-      <div id="cdd-cat-badge"></div>
+      <div id="cdd-cat-row">
+        <div id="cdd-cat-badge"></div>
+        <button id="cdd-btn-resumen" title="Copiar resumen para facturar (cliente, factura, entrada)">📝</button>
+      </div>
 
       <div id="cdd-info"></div>
       <div id="cdd-warn">⚠️ El valor supera el cupo aprobado para esta línea.</div>
@@ -465,7 +472,7 @@
       <!-- Caja Alcance + Factura (planes con interés, producto supera el cupo) -->
       <div id="cdd-alc-box">
         <div class="cdd-fact-box">
-          <div class="cdd-fact-k">🧾 Valor a<br>facturar</div>
+          <div class="cdd-fact-k">🧾 Valor a facturar</div>
           <div class="cdd-fact-v">$<span id="cdd-alc-fact">—</span></div>
         </div>
       </div>
@@ -520,6 +527,7 @@
   let siMode      = false;
   let alcanceState = null; // {entradaFinal} cuando el producto supera el cupo (planes con interés)
   let siCuotaState = null; // cuota quincenal del Plan SIN INTERÉS (para copiar)
+  let resumenState = null; // datos para el botón 📝 (copiar resumen para facturar)
 
   /* ══════════════════════════════════════════════════════════════
      INYECCIÓN
@@ -593,6 +601,7 @@
     if (alcBox) alcBox.classList.remove('on');
     alcanceState = null;
     siCuotaState = null;
+    resumenState = null;
     document.getElementById('cdd-wrap-copiar').style.display = 'none';
 
     // Ocultar banners e info
@@ -647,6 +656,7 @@
       if (el) el.addEventListener('focus', () => { try { el.select(); } catch (_) {} });
     });
     document.getElementById('cdd-btn-cred').addEventListener('click', copiarCredito);
+    document.getElementById('cdd-btn-resumen').addEventListener('click', copiarResumen);
     update();
   }
 
@@ -997,6 +1007,52 @@
   }
 
   /* ══════════════════════════════════════════════════════════════
+     COPIAR RESUMEN PARA FACTURAR (botón 📝)
+     CI + nombre del cliente, línea, valor a facturar, entrada y detalle
+  ═══════════════════════════════════════════════════════════════ */
+  function readCliente() {
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.childElementCount > 3 || inPanel(el)) continue;
+      const t = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (t.length > 160) continue;
+      const m = t.match(/^([^,]{3,120}?)\s*,\s*CI\s*:\s*(\d{10,13})\b/i);
+      if (m) return { nombre: m[1].trim(), ci: m[2] };
+    }
+    const u = location.pathname.match(/CEDULA\/(\d+)/i);
+    return { nombre: '', ci: u ? u[1] : '' };
+  }
+
+  function copiarResumen() {
+    const btn = document.getElementById('cdd-btn-resumen');
+    const flash = (cls, txt) => {
+      btn.classList.add(cls); btn.textContent = txt;
+      setTimeout(() => { btn.classList.remove(cls); btn.textContent = '📝'; }, 1600);
+    };
+    const r = resumenState;
+    if (!r) { flash('err', '⚠️'); return; }
+
+    const cli = readCliente();
+    const out = [];
+    out.push(`CI: ${cli.ci || '—'}   ${cli.nombre}`.trim());
+    out.push('');
+    if (r.linea) out.push(`Línea: ${r.linea}`);
+    out.push(`Valor a facturar: $${fmt(r.factura)}`);
+    out.push(`Total a cobrar entrada: $${fmt(r.total)}`);
+
+    const det = [];
+    if (r.alcance != null) {
+      det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.entKamina)}`);
+      det.push(`Alcance: $${fmt(r.alcance)}`);
+    }
+    if (r.cuotaSI != null) det.push(`6 pagos quincenales de $${fmt(r.cuotaSI)}`);
+    if (det.length) { out.push(''); out.push(...det); }
+
+    navigator.clipboard.writeText(out.join('\n'))
+      .then(() => flash('ok', '✓'))
+      .catch(() => flash('err', '⚠️'));
+  }
+
+  /* ══════════════════════════════════════════════════════════════
      AVISO DE ENTRADA (inline, dentro del panel sobre Copiar Cuotas)
      Con entrada (>0): tarjeta ROJA pulsante con el monto.
      Sin entrada (0%): tarjeta VERDE "Sin entrada".
@@ -1012,11 +1068,11 @@
       const d = entradaState.desglose;
       el.className = 'on ent';
       el.innerHTML = `
-        <div class="ei-k">⚠️ ENTRADA DEL CLIENTE</div>
-        <div class="ei-rows">
-          <div class="ei-row"><span>Entrada Kamina (${d.entPct}%)<small>la que pide el simulador</small></span><b>$${fmt(d.entKamina)}</b></div>
-          <div class="ei-row"><span>+ Alcance<small>excedente sobre el cupo</small></span><b>$${fmt(d.alcance)}</b></div>
-          <div class="ei-row tot"><span>TOTAL A COBRAR</span><b>$${fmt(d.total)}</b></div>
+        <div class="ei-k">⚠️ TOTAL A COBRAR DE ENTRADA</div>
+        <div class="ei-v">$${fmt(d.total)}</div>
+        <div class="ei-det">
+          <div class="ei-det-row"><span>Entrada Kamina (${d.entPct}%)</span><b>$${fmt(d.entKamina)}</b></div>
+          <div class="ei-det-row"><span>+ Alcance</span><b>$${fmt(d.alcance)}</b></div>
         </div>`;
       return;
     }
@@ -1138,8 +1194,9 @@
     const alcBox     = document.getElementById('cdd-alc-box');
     const sugRef     = document.getElementById('cdd-sug-hint');
 
-    // Reset del estado de alcance en cada cálculo
+    // Reset del estado de alcance / resumen en cada cálculo
     alcanceState = null;
+    resumenState = null;
     if (alcBox) alcBox.classList.remove('on');
     c2el.classList.remove('na');
 
@@ -1204,12 +1261,13 @@
       const entradaFinal = round2(entKamina + alcance);
       const factura      = round2(cupo + alcance);
       alcanceState = { entradaFinal };
+      resumenState = { linea: currentLine.name, factura, total: entradaFinal, entPct, entKamina, alcance };
 
       if (transpEl) transpEl.value = transporte;
       c2el.classList.add('na');
       if (sugRef) sugRef.textContent = '';
 
-      warn.textContent = '⚠️ Supera el cupo';
+      warn.textContent = '⚠️ Supera el cupo, requiere entrada';
       warn.classList.add('on'); c1el.classList.add('over');
 
       document.getElementById('cdd-rcred').textContent = fmt(cupo, 0);
@@ -1256,8 +1314,10 @@
       const entPct = currentLine.entPct || 0;
       if (entPct > 0) {
         const montoEntrada = Math.round(credito * entPct / 100 * 100) / 100;
+        resumenState = { linea: currentLine.name, factura: credito, total: montoEntrada, entPct };
         showEntradaAlert(`$${fmt(montoEntrada)}`, entPct);
       } else {
+        resumenState = { linea: currentLine.name, factura: credito, total: 0, entPct: 0 };
         showEntradaAlert(null, 0); // línea sin entrada → mensaje "Sin entrada"
       }
     } else {
@@ -1294,6 +1354,7 @@
 
     // Cuota visible + botón Copiar Cuotas (solo pagos quincenales)
     const wrap = document.getElementById('cdd-wrap-copiar');
+    resumenState = null;
     if (c1 > 0) {
       siCuotaState = cuota;
       document.getElementById('cdd-hint').textContent = excede ? '' : `📅 6 pagos quincenales de $${fmt(cuota)}`;
@@ -1328,10 +1389,12 @@
       document.getElementById('cdd-ab-fact').textContent  = fmt(factura);
       document.getElementById('cdd-ab-cuota').textContent = `6 pagos quincenales de $${fmt(cuota)}`;
       if (abonoBox) abonoBox.classList.add('on');
+      resumenState = { linea: currentLine.name, factura, total: abono, cuotaSI: cuota };
     } else {
       warn.classList.remove('on');
       c1el.classList.remove('over');
       if (abonoBox) abonoBox.classList.remove('on');
+      if (c1 > 0) resumenState = { linea: currentLine ? currentLine.name : null, factura: valorCredito, total: 0, cuotaSI: cuota };
     }
   }
 
