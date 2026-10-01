@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.11.0
+// @version      3.11.1
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -362,6 +362,14 @@
   /* Caja Alcance + Factura (planes con interés, producto supera el cupo) */
   #cdd-alc-box{display:none;margin:4px 0 8px;}
   #cdd-alc-box.on{display:block;}
+  #cdd-alc-box .cdd-sub-box{padding:6px 8px;}
+  .cdd-alc-sub{font-size:9.5px;color:#5a8a6c;margin-top:2px;}
+  #cdd-entrada-inline .ei-rows{margin:6px 0 2px;text-align:left;font-size:11.5px;}
+  #cdd-entrada-inline .ei-row{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:2px 2px;}
+  #cdd-entrada-inline .ei-row span small{display:block;font-size:9px;opacity:.8;font-weight:400;}
+  #cdd-entrada-inline .ei-row b{font-weight:800;white-space:nowrap;}
+  #cdd-entrada-inline .ei-row.tot{border-top:1px solid rgba(255,255,255,.4);margin-top:4px;padding-top:5px;
+    font-size:15px;font-weight:900;}
   .cdd-f input.na{background:#edf1f9;color:#9aabb8;text-decoration:line-through;}
 
   #cdd-open{position:fixed;right:14px;top:68px;z-index:2147483646;
@@ -379,7 +387,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.11.0</span>
+      <span class="cdd-ver">v3.11.1</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -454,15 +462,10 @@
 
       <!-- Caja Alcance + Factura (planes con interés, producto supera el cupo) -->
       <div id="cdd-alc-box">
-        <div class="cdd-sub-row">
-          <div class="cdd-sub-box entrada">
-            <div class="cdd-sub-k">➕ Alcance cliente</div>
-            <div class="cdd-sub-v">$<span id="cdd-alc-alc">—</span></div>
-          </div>
-          <div class="cdd-sub-box factura">
-            <div class="cdd-sub-k">🧾 Valor a facturar</div>
-            <div class="cdd-sub-v">$<span id="cdd-alc-fact">—</span></div>
-          </div>
+        <div class="cdd-sub-box factura">
+          <div class="cdd-sub-k">🧾 Valor a facturar</div>
+          <div class="cdd-sub-v">$<span id="cdd-alc-fact">—</span></div>
+          <div class="cdd-alc-sub" id="cdd-alc-fsub">—</div>
         </div>
         <div class="cdd-sub-cuota" id="cdd-alc-det">—</div>
       </div>
@@ -870,6 +873,18 @@
     const el = document.getElementById('cdd-entrada-inline');
     if (!el) return;
     if (!entradaState) { el.className = ''; el.innerHTML = ''; return; }
+    if (entradaState.desglose) {
+      const d = entradaState.desglose;
+      el.className = 'on ent';
+      el.innerHTML = `
+        <div class="ei-k">⚠️ ENTRADA DEL CLIENTE</div>
+        <div class="ei-rows">
+          <div class="ei-row"><span>Entrada Kamina (${d.entPct}%)<small>la que pide el simulador</small></span><b>$${fmt(d.entKamina)}</b></div>
+          <div class="ei-row"><span>+ Alcance<small>excedente sobre el cupo</small></span><b>$${fmt(d.alcance)}</b></div>
+          <div class="ei-row tot"><span>TOTAL A COBRAR</span><b>$${fmt(d.total)}</b></div>
+        </div>`;
+      return;
+    }
     if (entradaState.monto) {
       el.className = 'on ent';
       el.innerHTML = `
@@ -1067,17 +1082,15 @@
       document.getElementById('cdd-rmeta').textContent = fmt(meta);
       document.getElementById('cdd-rneto').textContent = (netoReal * 100).toFixed(2);
 
-      document.getElementById('cdd-alc-alc').textContent  = fmt(alcance);
       document.getElementById('cdd-alc-fact').textContent = fmt(factura);
+      document.getElementById('cdd-alc-fsub').textContent =
+        `Cupo $${fmt(cupo, 0)} + alcance $${fmt(alcance)}`;
       document.getElementById('cdd-alc-det').textContent  =
         `Efectivo $${fmt(efectivo)} − máx. $${fmt(efMax, 0)} = alcance $${fmt(alcance)}`;
       if (alcBox) alcBox.classList.add('on');
 
       showEntradaAlert(`$${fmt(entradaFinal)}`, entPct, {
-        titulo: '⚠️ ENTRADA TOTAL (con alcance)',
-        sub: entPct > 0
-          ? `Entrada ${entPct}% $${fmt(entKamina)} + alcance $${fmt(alcance)}`
-          : `Alcance $${fmt(alcance)} (línea sin entrada)`,
+        desglose: { entPct, entKamina, alcance, total: entradaFinal },
       });
       return;
     }
