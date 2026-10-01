@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.13.3
+// @version      3.14.0
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -363,6 +363,8 @@
   .cdd-sub-v{font-size:14px;font-weight:800;line-height:1.05;}
   .cdd-sub-box.entrada .cdd-sub-v{color:#c0201c;}
   .cdd-sub-box.factura .cdd-sub-v{color:#0b6033;}
+  .cdd-ab-det{font-size:9.5px;color:#b06a63;text-align:center;margin-top:3px;}
+  .cdd-ab-det:empty{display:none;}
   .cdd-sub-cuota{margin-top:5px;font-size:11px;color:#1748a8;font-weight:700;
     text-align:center;background:#eef3fb;border:1px solid #d5e0f2;border-radius:7px;padding:4px 7px;}
   .cdd-sub-cuota span{font-weight:800;}
@@ -395,7 +397,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.13.3</span>
+      <span class="cdd-ver">v3.14.0</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -424,7 +426,7 @@
       <div id="cdd-si-banner">
         <div class="cdd-si-title">🟢 Plan SIN INTERÉS · 0% interés · 0% entrada</div>
         <div class="cdd-si-val">$<span id="cdd-si-vc">0.00</span></div>
-        <div class="cdd-si-sub">Valor crédito = Efectivo (C1) × 1.15</div>
+        <div class="cdd-si-sub">Valor crédito = (Efectivo + Sugerido) × 1.15</div>
       </div>
 
       <!-- Inputs -->
@@ -491,6 +493,7 @@
             <div class="cdd-sub-v">$<span id="cdd-ab-fact">—</span></div>
           </div>
         </div>
+        <div class="cdd-ab-det" id="cdd-ab-det"></div>
         <div class="cdd-sub-cuota">📅 <span id="cdd-ab-cuota">—</span></div>
       </div>
 
@@ -1035,13 +1038,22 @@
 
     const cli = readCliente();
     const out = [];
-    out.push(`CI: ${cli.ci || '—'}   ${cli.nombre}`.trim());
+    out.push(`CI: ${cli.ci || '—'}   ${cli.nombre ? 'Cliente ' + cli.nombre : ''}`.trim());
     out.push('');
     if (r.linea) out.push(`Línea: ${r.linea}`);
     out.push(`Valor a facturar: $${fmt(r.factura)}`);
     out.push(`Total a cobrar entrada: $${fmt(r.total)}`);
 
     const det = [];
+    if (r.sugIncl > 0) {
+      // Dentro del cupo: el sugerido va incluido en el crédito
+      if (r.entPct > 0) det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.total)}`);
+      det.push(`Sugerido: $${fmt(r.sugIncl)}`);
+    }
+    if (r.siAlcProd != null) {
+      if (r.siAlcProd > 0) det.push(`Alcance: $${fmt(r.siAlcProd)}`);
+      if (r.siAlcSug  > 0) det.push(`Sugerido: $${fmt(r.siAlcSug)}`);
+    }
     if (r.alcance != null) {
       det.push(`Entrada Kamina (${r.entPct}%): $${fmt(r.entKamina)}`);
       if (r.alcProd > 0) det.push(`Alcance: $${fmt(r.alcProd)}`);
@@ -1138,11 +1150,11 @@
   ═══════════════════════════════════════════════════════════════ */
   function setSIMode(on) {
     document.getElementById('cdd-si-banner').classList.remove('on'); // banner viejo ya no se usa
-    // En modo SIN INTERÉS ocultamos Transporte y Sugerido (crédito = efectivo × 1.15)
+    // En modo SIN INTERÉS se oculta Transporte; Sugerido sí aplica: crédito = (efectivo + sugerido) × 1.15
     const r3 = document.querySelector('.cdd-r3-in');
     if (r3) {
       r3.querySelector('#cdd-transp').closest('.cdd-f').style.display = on ? 'none' : '';
-      r3.querySelector('#cdd-c2').closest('.cdd-f').style.display     = on ? 'none' : '';
+      r3.style.gridTemplateColumns = on ? '1fr 1fr' : '';
     }
     // Input "Valor producto" solo visible en SIN INTERÉS
     // (eliminado: el abono se calcula solo por efectivo vs tope)
@@ -1326,10 +1338,10 @@
       const entPct = currentLine.entPct || 0;
       if (entPct > 0) {
         const montoEntrada = Math.round(credito * entPct / 100 * 100) / 100;
-        resumenState = { linea: currentLine.name, factura: credito, total: montoEntrada, entPct };
+        resumenState = { linea: currentLine.name, factura: credito, total: montoEntrada, entPct, sugIncl: sugerido };
         showEntradaAlert(`$${fmt(montoEntrada)}`, entPct);
       } else {
-        resumenState = { linea: currentLine.name, factura: credito, total: 0, entPct: 0 };
+        resumenState = { linea: currentLine.name, factura: credito, total: 0, entPct: 0, sugIncl: sugerido };
         showEntradaAlert(null, 0); // línea sin entrada → mensaje "Sin entrada"
       }
     } else {
@@ -1339,18 +1351,18 @@
 
   // ── Modo Plan SIN INTERÉS ─────────────────────────────────────
   function updateSinInteres() {
-    const c1 = parseFloat(document.getElementById('cdd-c1').value) || 0;
+    const c1  = parseFloat(document.getElementById('cdd-c1').value) || 0;
+    const sug = Math.max(0, parseFloat(document.getElementById('cdd-c2').value) || 0);
+    const tot = round2(c1 + sug); // efectivo + sugerido
 
     // Tope de efectivo aprobado = cupo de la línea ÷ 1.15 (entero inferior)
     const topeEfectivo = currentLine ? topeSinInteres(currentLine.cupo) : 0;
 
-    // ¿El efectivo del producto supera el tope aprobado? → manejar con entrada/abono
-    const excede = currentLine && c1 > topeEfectivo && topeEfectivo > 0;
+    // ¿Efectivo + sugerido supera el tope? → el excedente lo da el cliente como entrada
+    const excede = currentLine && c1 > 0 && tot > topeEfectivo && topeEfectivo > 0;
 
-    // El crédito se calcula sobre el efectivo que SÍ entra:
-    //   - Si excede: se ingresa por el tope aprobado
-    //   - Si no: por el efectivo tal cual
-    const efectivoCredito = excede ? topeEfectivo : c1;
+    // Crédito = (efectivo + sugerido) × 1.15, o el tope si excede
+    const efectivoCredito = excede ? topeEfectivo : tot;
     const { valorCredito } = calcSinInteres(efectivoCredito);
     const cuota = round2(valorCredito / 6); // cuota SOLO sobre el crédito (6 quincenales)
 
@@ -1359,6 +1371,7 @@
 
     // Escribir en la MISMA caja de crédito (con botón Copiar) que el modo normal
     document.getElementById('cdd-rcred').textContent = c1 > 0 ? fmt(valorCredito) : '—';
+    document.getElementById('cdd-c2').classList.remove('na');
     document.getElementById('cdd-si-vc').textContent = fmt(valorCredito); // compat banner viejo
 
     const sugRef = document.getElementById('cdd-sug-hint');
@@ -1389,8 +1402,10 @@
     const abonoBox  = document.getElementById('cdd-abono-box');
     if (excede) {
       // Producto por encima del tope: NO se bloquea, se cubre con entrada
-      const abono   = round2(c1 - topeEfectivo);          // resta: precio efectivo − tope
-      const factura = round2(valorCredito + abono);        // crédito + abono
+      const abono   = round2(tot - topeEfectivo);          // (efectivo + sugerido) − tope
+      const factura = round2(valorCredito + abono);         // crédito + abono
+      const abProd  = round2(Math.max(0, c1 - topeEfectivo)); // lo que excede el producto
+      const abSug   = round2(abono - abProd);                 // parte del sugerido
 
       warn.textContent = `⚠️ Producto de mayor valor: el cliente da una entrada de $${fmt(abono)}.`;
       warn.classList.add('on');
@@ -1400,8 +1415,12 @@
       document.getElementById('cdd-ab-abono').textContent = fmt(abono);
       document.getElementById('cdd-ab-fact').textContent  = fmt(factura);
       document.getElementById('cdd-ab-cuota').textContent = `6 pagos quincenales de $${fmt(cuota)}`;
+      document.getElementById('cdd-ab-det').textContent   = abSug > 0
+        ? (abProd > 0 ? `Alcance $${fmt(abProd)} + Sugerido $${fmt(abSug)}` : `Sugerido $${fmt(abSug)}`)
+        : '';
       if (abonoBox) abonoBox.classList.add('on');
-      resumenState = { linea: currentLine.name, factura, total: abono, cuotaSI: cuota };
+      resumenState = { linea: currentLine.name, factura, total: abono, cuotaSI: cuota,
+                       siAlcProd: abProd, siAlcSug: abSug };
     } else {
       if (c1 > 0 && valorCredito < CREDITO_MIN_SI) {
         warn.textContent = `⚠️ Crédito menor al mínimo de $${fmt(CREDITO_MIN_SI, 0)}`;
@@ -1412,7 +1431,7 @@
         c1el.classList.remove('over');
       }
       if (abonoBox) abonoBox.classList.remove('on');
-      if (c1 > 0) resumenState = { linea: currentLine ? currentLine.name : null, factura: valorCredito, total: 0, cuotaSI: cuota };
+      if (c1 > 0) resumenState = { linea: currentLine ? currentLine.name : null, factura: valorCredito, total: 0, cuotaSI: cuota, sugIncl: sug, entPct: 0 };
     }
   }
 
