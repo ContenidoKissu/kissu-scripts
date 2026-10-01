@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.14.2
+// @version      3.14.3
 // @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
@@ -397,7 +397,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.14.2</span>
+      <span class="cdd-ver">v3.14.3</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -1277,8 +1277,20 @@
     document.getElementById('cdd-hint').textContent = '';
 
     // ── ¿El producto supera lo que entra en el cupo? → modo ALCANCE ──
-    // El sugerido también ocupa cupo: con sugerido entra menos efectivo y sube el alcance
-    const efMax  = currentLine ? efectivoMaxPorCupo(currentLine.cupo, carteraRate, sugInput) : 0;
+    // ¿Supera el cupo? Se mide con el crédito real (efectivo + su transporte + sugerido)
+    // Si supera: el transporte se fija en el del efectivo máximo SIN sugerido ("hasta"),
+    // así el sugerido se suma completo al alcance (no lo "absorbe" un cambio de rango de transporte).
+    let efMax = 0, efMax0 = 0, transpFijo = 0;
+    if (currentLine && efectivo > 0) {
+      const credReal = calcCartera(efectivo, transporteAuto(efectivo), sugInput, carteraRate).credito;
+      if (credReal > currentLine.cupo) {
+        efMax0     = efectivoMaxPorCupo(currentLine.cupo, carteraRate, 0);
+        transpFijo = transporteAuto(efMax0);
+        const netoR = 1 - (carteraRate + HONORARIO);
+        efMax = Math.floor((currentLine.cupo * netoR) / MARGIN_TARGET - transpFijo - sugInput);
+        while (efMax > 0 && calcCartera(efMax, transpFijo, sugInput, carteraRate).credito > currentLine.cupo) efMax--;
+      }
+    }
     const excede = currentLine && efMax > 0 && efectivo > efMax;
 
     if (excede) {
@@ -1286,12 +1298,11 @@
       // El Sugerido se suma al alcance (reduce el efectivo que entra en el cupo).
       const cupo         = currentLine.cupo;
       const entPct       = currentLine.entPct || 0;
-      const transporte   = transporteAuto(efMax);
+      const transporte   = transpFijo;
       const { base, meta, netoReal } = calcCartera(efMax, transporte, sugInput, carteraRate);
 
       const alcance      = round2(efectivo - efMax);
       // Desglose: lo que excede el producto + lo que aporta el sugerido
-      const efMax0       = efectivoMaxPorCupo(cupo, carteraRate, 0);
       let   alcProd      = round2(Math.max(0, efectivo - efMax0));
       let   alcSug       = round2(Math.max(0, alcance - alcProd));
       alcProd            = round2(alcance - alcSug);
