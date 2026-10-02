@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KISSU · Recordatorio Cupo (pegar lista → recordatorio1 + imagen)
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  Pega la lista (cédula, nombre, celular, cupo), y por cada persona crea el contacto en WhaTicket y envía la plantilla "recordatorio1" (nombre, cupo, cédula) CON IMAGEN por la línea Kissu. Con estimado de tiempo, contador en vivo, pausas, tope por tanda y control de duplicados.
 // @author       KISSU
 // @updateURL    https://raw.githubusercontent.com/ContenidoKissu/kissu-scripts/main/recordatorio-cupo.user.js
@@ -477,10 +477,15 @@
   }
   async function abrirModalPlantilla() {
     if (modalPlantilla()) return true;
-    const btn = buscarPorTexto('button, [role="button"], div, span, a',
-      t => /plantilla de mensaje/i.test(t) && t.length < 40,
-      el => { const r = el.getBoundingClientRect(); return r.bottom > window.innerHeight * 0.5 && r.width > 20; });
-    if (!btn) { log('❌ No encontré el botón "Plantilla de mensaje"', 'error'); return false; }
+    // WhaTicket ahora muestra el botón como "Plantilla" (antes "Plantilla de mensaje")
+    const esBtnPlantilla = t => t.length < 40 && /(^|\s)plantilla( de mensaje)?$/i.test(t);
+    const abajo = el => { const r = el.getBoundingClientRect(); return r.bottom > window.innerHeight * 0.5 && r.width > 20; };
+    let btn = buscarPorTexto('button, [role="button"]', esBtnPlantilla, abajo);
+    if (!btn) {
+      const el = buscarPorTexto('div, span, a', esBtnPlantilla, abajo);
+      if (el) btn = el.querySelector('button, [role="button"]') || el.closest('button, [role="button"]') || el;
+    }
+    if (!btn) { log('❌ No encontré el botón "Plantilla"', 'error'); return false; }
     realClick(btn);
     for (let i = 0; i < 14; i++) { await sleep(300); if (modalPlantilla()) return true; }
     log('❌ El modal de plantilla no apareció', 'error');
