@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         KISSU · Recordatorio Cupo (pegar lista → recordatorio1 + imagen)
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.1.2
 // @description  Pega la lista (cédula, nombre, celular, cupo), y por cada persona crea el contacto en WhaTicket y envía la plantilla "recordatorio1" (nombre, cupo, cédula) CON IMAGEN por la línea Kissu. Con estimado de tiempo, contador en vivo, pausas, tope por tanda y control de duplicados.
 // @author       KISSU
 // @updateURL    https://raw.githubusercontent.com/ContenidoKissu/kissu-scripts/main/recordatorio-cupo.user.js
@@ -402,6 +402,16 @@
     return true;
   }
 
+  // Textos de avisos/toasts visibles en la página (errores de WhaTicket)
+  function leerAvisos() {
+    const sel = 'mat-snack-bar-container, .mat-mdc-snack-bar-container, simple-snack-bar, [role="alert"], ' +
+                '.toast, .Toastify__toast, .swal2-popup, .notification, .alert';
+    return [...document.querySelectorAll(sel)]
+      .filter(e => !e.closest(PANEL_ID) && e.offsetParent !== null)
+      .map(e => textoDe(e).replace(/\s+/g, ' ').trim())
+      .filter(t => t.length > 2);
+  }
+
   async function crearChat(item) {
     const num = (item.telefono || '').replace(/\D/g, '');
     if (!num) return false;
@@ -454,15 +464,25 @@
     if (!btn || btn.disabled) { log('❌ "Iniciar conversación" sigue deshabilitado', 'error'); return false; }
 
     const antes = location.pathname;
+    const avisosAntes = new Set(leerAvisos());
     btn.click();
     for (let i = 0; i < 30; i++) {
       await sleep(300);
       if (location.pathname !== antes || !dialogoCon('Iniciar un chat')) {
         log('✅ Conversación abierta', 'success'); await sleep(1600); return true;
       }
+      // ¿WhaTicket mostró un aviso/error? (p. ej. ticket abierto con otro usuario)
+      const nuevos = leerAvisos().filter(t => !avisosAntes.has(t));
+      if (nuevos.length) {
+        log(`⚠ WhaTicket dice: "${nuevos.join(' | ').slice(0, 220)}"`, 'warn');
+        break;
+      }
       if (i === 5) { const b2 = botonIniciar(dialogoCon('Iniciar un chat') || modal); if (b2) realClick(b2); }
     }
     log('⚠ "Iniciar conversación" no respondió', 'warn');
+    // Diagnóstico: qué muestra el modal (conexión, contacto elegido, etc.)
+    const m = dialogoCon('Iniciar un chat');
+    if (m) log(`🔎 Modal: ${textoDe(m).replace(/\s+/g, ' ').slice(0, 220)}`, 'info');
     return false;
   }
 
