@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         💳 Crédito Directo Digital – Kamina Pay
 // @namespace    luzverde-credito-directo
-// @version      3.14.3
-// @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas.
+// @version      3.15.0
+// @description  Panel flotante CDD para Kamina Pay. Modelo Compra de Cartera: crédito inverso por categoría (103%), tope de efectivo con transporte, alcance cuando el producto supera el cupo, Plan SIN INTERÉS ×1.15 con copiar cuotas. Buscador de ciudades que aplican a crédito.
 // @author       luzverde
 // @match        *://ecuador.luzverdetech.com/ventas/resumen-estado-cliente/CEDULA/*
 // @updateURL    https://raw.githubusercontent.com/ContenidoKissu/kissu-scripts/main/kamina-cdd.user.js
@@ -43,6 +43,28 @@
   const PLAN_SI_RATE = 0.15;   // Plan SIN INTERÉS: markup 15% → crédito = C1 × 1.15
   const ANNUAL_RATE  = 0.1559; // tasa anual nominal Kamina (referencia)
   const ALL_MONTHS   = [6, 9, 12, 15, 18, 24];
+
+  // ── CIUDADES QUE APLICAN A CRÉDITO (por provincia) ───────────────
+  // Solo lo que está aquí aplica. Para agregar/quitar, editar esta lista.
+  const CIUDADES_CREDITO = {
+    'Azuay'      : ['Cuenca', 'Gualaceo', 'Paute', 'Sígsig', 'Girón', 'Santa Isabel'],
+    'Bolívar'    : ['Guaranda', 'San Miguel', 'Chimbo', 'Chillanes', 'Caluma'],
+    'Cañar'      : ['Azogues', 'La Troncal', 'Cañar', 'Biblián', 'Déleg'],
+    'Carchi'     : ['Tulcán', 'San Gabriel', 'El Ángel', 'Julio Andrade'],
+    'Chimborazo' : ['Riobamba', 'Guano', 'Alausí', 'Chambo', 'Colta'],
+    'Cotopaxi'   : ['Latacunga', 'La Maná', 'Salcedo', 'Pujilí', 'Saquisilí'],
+    'El Oro'     : ['Machala', 'Pasaje', 'Santa Rosa', 'Huaquillas', 'El Guabo', 'Zaruma', 'Piñas'],
+    'Esmeraldas' : ['Esmeraldas', 'Atacames', 'Quinindé', 'Muisne', 'San Lorenzo'],
+    'Guayas'     : ['Guayaquil', 'Durán', 'Samborondón', 'Daule', 'Milagro', 'Playas', 'Naranjal', 'El Triunfo', 'Yaguachi', 'Balzar'],
+    'Imbabura'   : ['Ibarra', 'Otavalo', 'Cotacachi', 'Atuntaqui', 'Pimampiro'],
+    'Loja'       : ['Loja', 'Catamayo', 'Macará', 'Cariamanga', 'Catacocha', 'Saraguro'],
+    'Los Ríos'   : ['Babahoyo', 'Quevedo', 'Ventanas', 'Vinces', 'Buena Fe', 'Valencia', 'Mocache'],
+    'Manabí'     : ['Manta', 'Portoviejo', 'Chone', 'Montecristi', 'Jipijapa', 'Pedernales', 'Bahía de Caráquez', 'El Carmen'],
+    'Pichincha'  : ['Quito', 'Cayambe', 'Machachi', 'Sangolquí', 'Tabacundo', 'Pedro Vicente Maldonado'],
+    'Santa Elena': ['Santa Elena', 'Salinas', 'La Libertad'],
+    'Santo Domingo de los Tsáchilas': ['Santo Domingo', 'La Concordia'],
+    'Tungurahua' : ['Ambato', 'Baños', 'Pelileo', 'Píllaro', 'Quero', 'Cevallos'],
+  };
 
   /* ══════════════════════════════════════════════════════════════
      MATEMÁTICAS
@@ -216,6 +238,17 @@
   #cdd-head-rangos .hr.si{color:#bff0d1;}
   #cdd-head-rangos .hr.si b{color:#daffe9;}
 
+  /* Buscador de ciudades que aplican a crédito (compacto) */
+  #cdd-city{margin-bottom:8px;}
+  #cdd-city-in{width:100%;box-sizing:border-box;border:1.5px solid #ccdaf0;background:#fff;
+    border-radius:8px;padding:5px 9px;font-size:11px;font-family:inherit;color:#132033;outline:none;}
+  #cdd-city-in:focus{border-color:#1f5fd1;}
+  #cdd-city-res{display:flex;flex-wrap:wrap;gap:4px;}
+  #cdd-city-res:not(:empty){margin-top:5px;}
+  .cdd-city-ok{background:#e8f6ee;border:1px solid #8ecbab;color:#0b6033;border-radius:6px;
+    padding:2px 7px;font-size:10.5px;font-weight:700;white-space:nowrap;}
+  .cdd-city-ok span{font-weight:400;color:#2e7a52;}
+  .cdd-city-more{font-size:10px;color:#6b7a8f;padding:2px 4px;}
   #cdd-body{background:#f2f6fd;padding:10px 11px 12px;max-height:80vh;overflow-y:auto;}
 
   #cdd-lines{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;align-items:flex-start;position:relative;padding-right:24px;}
@@ -397,7 +430,7 @@
   const PANEL_HTML = `
     <div id="cdd-head">
       <span id="cdd-head-title">💳 Crédito Directo Digital</span>
-      <span class="cdd-ver">v3.14.3</span>
+      <span class="cdd-ver">v3.15.0</span>
       <button class="cdd-hbtn-limpiar" id="cdd-btn-limpiar">🗑️</button>
       <button class="cdd-hbtn" id="cdd-btn-min">—</button>
       <button class="cdd-hbtn" id="cdd-btn-close">✕</button>
@@ -407,6 +440,13 @@
       <span class="hr">🔵 Otras <b>$300–$2,500</b></span>
     </div>
     <div id="cdd-body">
+
+      <!-- Buscador: ciudades que aplican a crédito -->
+      <div id="cdd-city">
+        <input id="cdd-city-in" type="text" autocomplete="off" spellcheck="false"
+               placeholder="🔍 Ciudad del cliente… (¿aplica a crédito?)">
+        <div id="cdd-city-res"></div>
+      </div>
 
       <!-- Botones de línea -->
       <div id="cdd-lines">
@@ -636,6 +676,70 @@
     // Resetear botón copiar
     const btnCopiar = document.getElementById('cdd-btn-copiar');
     if (btnCopiar) { btnCopiar.textContent = '📋 Copiar Cuotas'; btnCopiar.classList.remove('copied'); }
+
+    // Limpiar buscador de ciudades
+    limpiarCiudad();
+  }
+
+  /* ══════════════════════════════════════════════════════════════
+     BUSCADOR DE CIUDADES QUE APLICAN A CRÉDITO
+     Ignora tildes/mayúsculas. Solo muestra lo que aplica;
+     si no hay coincidencia no aparece nada.
+  ═══════════════════════════════════════════════════════════════ */
+  const normCity = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9ñ ]/g, ' ').replace(/\s+/g, ' ').trim();
+  const CITY_ABREV = { 'sto': 'santo', 'sta': 'santa', 'gye': 'guayaquil', 'uio': 'quito' };
+
+  // Índice plano: [{ciudad, provincia, nCiudad, hay}]
+  const CITY_INDEX = [];
+  Object.entries(CIUDADES_CREDITO).forEach(([prov, ciudades]) => {
+    ciudades.forEach(c => CITY_INDEX.push({
+      ciudad: c, provincia: prov, nCiudad: normCity(c), hay: normCity(c + ' ' + prov),
+    }));
+  });
+
+  function buscarCiudades(q) {
+    const tokens = normCity(q).split(' ').filter(Boolean).map(t => CITY_ABREV[t] || t);
+    const full   = tokens.join(' ');
+    if (full.length < 2) return [];
+    const res = [];
+    CITY_INDEX.forEach(e => {
+      if (!tokens.every(t => e.hay.includes(t))) return;
+      // Orden: ciudad empieza igual → palabra de la ciudad empieza igual → contiene → solo por provincia
+      let score = 3;
+      if (e.nCiudad.startsWith(full))                                   score = 0;
+      else if (e.nCiudad.split(' ').some(w => w.startsWith(tokens[0]))) score = 1;
+      else if (e.nCiudad.includes(tokens[0]))                           score = 2;
+      res.push({ ...e, score });
+    });
+    return res.sort((a, b) => a.score - b.score);
+  }
+
+  function renderCiudades() {
+    const inp = document.getElementById('cdd-city-in');
+    const box = document.getElementById('cdd-city-res');
+    if (!inp || !box) return;
+    const MAX = 8;
+    const res = buscarCiudades(inp.value);
+    box.innerHTML = '';
+    res.slice(0, MAX).forEach(e => {
+      const chip = document.createElement('div');
+      chip.className = 'cdd-city-ok';
+      chip.innerHTML = `✅ ${e.ciudad} <span>· ${e.provincia}</span>`;
+      box.appendChild(chip);
+    });
+    if (res.length > MAX) {
+      const more = document.createElement('div');
+      more.className = 'cdd-city-more';
+      more.textContent = `+${res.length - MAX} más…`;
+      box.appendChild(more);
+    }
+  }
+
+  function limpiarCiudad() {
+    const inp = document.getElementById('cdd-city-in');
+    if (inp) inp.value = '';
+    renderCiudades();
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -662,6 +766,13 @@
     });
     document.getElementById('cdd-btn-cred').addEventListener('click', copiarCredito);
     document.getElementById('cdd-btn-resumen').addEventListener('click', copiarResumen);
+    // Buscador de ciudades
+    const cityIn = document.getElementById('cdd-city-in');
+    cityIn.addEventListener('input', renderCiudades);
+    cityIn.addEventListener('keydown', e => {
+      e.stopPropagation(); // que los atajos de la página no interfieran al escribir
+      if (e.key === 'Escape') limpiarCiudad();
+    });
     update();
   }
 
